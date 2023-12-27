@@ -61,8 +61,8 @@ class Trader():
       # Generate all trading's indicators
       def calculate_indicator(self):
         # Calcul des EMAs
-        self.data['EMA_Short'] = ta.ema(self.data["Close"], 20)
-        self.data['EMA_Long'] = ta.ema(self.data["Close"], 50)
+        self.data['EMA_Short'] = ta.ema(self.data["Close"], 15)
+        self.data['EMA_Long'] = ta.ema(self.data["Close"], 30)
 
         # Calculate MACD
         macd = ta.macd(self.data["Close"], fast=self.fast_length, slow=self.slow_length, signal=self.signal_length)
@@ -107,13 +107,13 @@ class Trader():
         "Complete": [complete]
         }, index=[start_time])
 
-        # Vérifier si la nouvelle bougie est complète
+        # Check if the candle is complete
         if complete:
             if start_time in self.data.index:
-                # Mettez à jour la bougie existante
+                # Update candle
                 self.data.loc[start_time] = new_data.loc[start_time]
             else:
-                # Concaténer avec les données existantes
+                # Concat with existing data
                 self.data = pd.concat([self.data, new_data])
 
       # Combine CROSSOVER signal with MACD signal for generate a entry signal
@@ -131,12 +131,12 @@ class Trader():
         self.last_entry_price = None
 
         try:
-            if entry == 1 and last_rsi < 70:
+            if entry == 1 and last_rsi < 65 and self.in_position == False:
                 self.last_entry_price = last_close
                 order = client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
                 print(f"Achat effectué : {order} ")
                 self.in_position = True
-            elif entry == -1 and last_rsi > 30:
+            elif entry == -1 and last_rsi > 35 and self.in_position == True:
                 self.last_entry_price = last_close
                 order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
                 print(f"Vente effectuée : {order}")
@@ -157,20 +157,6 @@ class Trader():
         except Exception as e:
                 print(f"Erreur: {e}")
       
-      # Créer le graphique à chandeliers
-      # fig = go.Figure(df=[go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"],  close=df["Close"])])
-      #         # Ajouter des lignes pour les indicateurs
-      # fig.add_trace(go.Scatter(x=df.index, y=df["EMA_Short"], mode="lines", name="EMA_Short", line=dic  (color="blue")))
-      # fig.add_trace(go.Scatter(x=df.index, y=df["EMA_Long"], mode="lines", name="EMA_Long", line=dic  (color="crimson")))
-      # fig.add_trace(go.Scatter(x=df[df["Entry"] == 1].index, y=df[df["Entry"] == 1]["Close"], 
-      #                          mode="markers", marker_symbol="triangle-up", marker_color="green"  marker_size=15, name="Buy"))
-      # fig.add_trace(go.Scatter(x=df[df["Entry"] == -1].index, y=df[df["Entry"] == -1]["Close"], 
-      #                          mode="markers", marker_symbol="triangle-down", marker_color="red"  marker_size=15, name="Sell"))
-
-            
-      # Afficher le graphique
-      # fig.show()
-
      
 if __name__ == "__main__":
 
@@ -181,8 +167,8 @@ if __name__ == "__main__":
     client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
 
     # Symbol and Interval variables
-    symbol = "BTCUSDT"
-    bar_length = "1h"
+    symbol = "ETHUSDT"
+    bar_length = "30m"
 
     # Get account data
     account_info = client.get_account()
@@ -198,11 +184,18 @@ if __name__ == "__main__":
     price = btc_price
     pourcentage_risque_par_trade = 0.01
     montant_risque = capital * pourcentage_risque_par_trade
+
+    # Units to trade
     precision = 5
     unit = montant_risque / btc_price
     units = round(unit, precision)
-    target_profit = 1.01
-    stop_loss = 0.99
+
+    # Stop Loss and Target Profit
+    ratio_risque_rendement = 3
+    pourcentage_stop_loss = 0.05
+    pourcentage_target_profit = pourcentage_stop_loss * ratio_risque_rendement
+    stop_loss = 1 - pourcentage_stop_loss 
+    target_profit = 1 + pourcentage_target_profit
 
     # Trader Instance
     trader = Trader(symbol=symbol, bar_length=bar_length, stop_loss=stop_loss, target_profit=target_profit, units=units)
@@ -215,8 +208,8 @@ if __name__ == "__main__":
 
     trader.twm.stop()
 
-    # data = trader.data[trader.data["Entry"]!=0]
-    data = trader.data
+    data = trader.data[trader.data["Entry"]!=0]
+    # data = trader.data
     print(data)
 
 #---------------------
