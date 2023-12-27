@@ -6,7 +6,7 @@ import os
 from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceOrderException
 from binance import ThreadedWebsocketManager
-from datetime import datetime, timedelta
+from backtesting import Backtest, Strategy
 from dotenv import load_dotenv
 import time
 
@@ -180,8 +180,13 @@ if __name__ == "__main__":
     # Binance Client
     client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
 
+    # Symbol and Interval variables
+    symbol = "BTCUSDT"
+    bar_length = "1h"
+
+    # Get account data
     account_info = client.get_account()
-    btc_price = float(client.get_symbol_ticker(symbol="BTCUSDT")['price'])
+    btc_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
     balances = account_info['balances']
     for balance in balances:
         if balance['asset'] == 'USDT':
@@ -189,8 +194,6 @@ if __name__ == "__main__":
             print("Solde en USDT : ", usdt_balance)
 
     # Trading Variables           
-    bar_length = "1h"
-    symbol = "RNDRUSDT"
     capital = usdt_balance
     price = btc_price
     pourcentage_risque_par_trade = 0.01
@@ -215,6 +218,9 @@ if __name__ == "__main__":
     # data = trader.data[trader.data["Entry"]!=0]
     data = trader.data
     print(data)
+
+#---------------------
+# Implémenter Backtesting
     
             
           
