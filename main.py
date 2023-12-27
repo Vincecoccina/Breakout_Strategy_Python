@@ -11,31 +11,7 @@ from dotenv import load_dotenv
 import time
 
 load_dotenv()
-api_key = os.getenv("API_KEY_TEST")
-secret_key = os.getenv("SECRET_KEY_TEST")
 
-# Binance Client
-client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=False)
-
-
-
-# Créer le graphique à chandeliers
-# fig = go.Figure(df=[go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"])])
-#         # Ajouter des lignes pour les indicateurs
-# fig.add_trace(go.Scatter(x=df.index, y=df["EMA_Short"], mode="lines", name="EMA_Short", line=dict(color="blue")))
-# fig.add_trace(go.Scatter(x=df.index, y=df["EMA_Long"], mode="lines", name="EMA_Long", line=dict(color="crimson")))
-# fig.add_trace(go.Scatter(x=df[df["Entry"] == 1].index, y=df[df["Entry"] == 1]["Close"], 
-#                          mode="markers", marker_symbol="triangle-up", marker_color="green",marker_size=15, name="Buy"))
-# fig.add_trace(go.Scatter(x=df[df["Entry"] == -1].index, y=df[df["Entry"] == -1]["Close"], 
-#                          mode="markers", marker_symbol="triangle-down", marker_color="red",marker_size=15, name="Sell"))
-
-      
-# Afficher le graphique
-# fig.show()
-
-
-#----------------------------------
-# Implémentation de la class
 class Trader():
       def __init__(self, symbol, bar_length, stop_loss, target_profit, units):
             self.symbol = symbol
@@ -47,6 +23,8 @@ class Trader():
             self.fast_length = 12
             self.slow_length = 26
             self.signal_length = 9
+            self.rsi_length = 14
+            self.in_position = False
 
         
       def start_trading(self):
@@ -91,6 +69,7 @@ class Trader():
         self.data['MACD'] = macd['MACD_12_26_9']
         self.data['MACD_Histogram'] = macd['MACDh_12_26_9']
         self.data['MACD_Signal'] = macd['MACDs_12_26_9']
+        self.data['RSI'] = ta.rsi(self.data["Close"], length=self.rsi_length)
         self.generate_crossover_signal()
         self.generate_macd_signal()
         self.generate_entry_signal()
@@ -147,42 +126,95 @@ class Trader():
 
       def execute_trades(self):
         entry = self.data["Entry"].iloc[-1]
+        last_close = self.data["Close"].iloc[-1]
+        last_rsi = self.data["RSI"].iloc[-1]
+        self.last_entry_price = None
 
         try:
-            if entry == 1:
-                # order = client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
-                print(f"Achat effectué : ")
-            elif entry == -1:
-                # order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
-                print(f"Vente effectuée : ")
+            if entry == 1 and last_rsi < 70:
+                self.last_entry_price = last_close
+                order = client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
+                print(f"Achat effectué : {order} ")
+                self.in_position = True
+            elif entry == -1 and last_rsi > 30:
+                self.last_entry_price = last_close
+                order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                print(f"Vente effectuée : {order}")
+                self.in_position = False
             else:
-                print(f"neutre")
+                print(f"Aucune transaction effectué")
+            
+            if self.in_position:
+                stop_loss_price = self.last_entry_price * (1 - self.stop_loss / 100)
+                target_profit_price = self.last_entry_price * (1 + self.target_profit / 100)
+
+                if last_close <= stop_loss_price or last_close >= target_profit_price:
+                    # Close position
+                    order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                    print(f"Position clôturée à {last_close}")
+                    self.in_position = False
+                    self.last_entry_price = None
         except Exception as e:
                 print(f"Erreur: {e}")
+      
+      # Créer le graphique à chandeliers
+      # fig = go.Figure(df=[go.Candlestick(x=df.index, open=df["Open"], high=df["High"], low=df["Low"],  close=df["Close"])])
+      #         # Ajouter des lignes pour les indicateurs
+      # fig.add_trace(go.Scatter(x=df.index, y=df["EMA_Short"], mode="lines", name="EMA_Short", line=dic  (color="blue")))
+      # fig.add_trace(go.Scatter(x=df.index, y=df["EMA_Long"], mode="lines", name="EMA_Long", line=dic  (color="crimson")))
+      # fig.add_trace(go.Scatter(x=df[df["Entry"] == 1].index, y=df[df["Entry"] == 1]["Close"], 
+      #                          mode="markers", marker_symbol="triangle-up", marker_color="green"  marker_size=15, name="Buy"))
+      # fig.add_trace(go.Scatter(x=df[df["Entry"] == -1].index, y=df[df["Entry"] == -1]["Close"], 
+      #                          mode="markers", marker_symbol="triangle-down", marker_color="red"  marker_size=15, name="Sell"))
+
+            
+      # Afficher le graphique
+      # fig.show()
 
      
+if __name__ == "__main__":
 
- # Variables de trading
-bar_length = "1h"
-symbol = "BTCUSDT"
-pourcentage_risque_par_trade = 0.01
-target_profit = 1.01
-stop_loss = 0.99
-units = 10
+    api_key = os.getenv("API_KEY_TEST")
+    secret_key = os.getenv("SECRET_KEY_TEST")
 
-# Instance de la class Trader
-trader = Trader(symbol=symbol, bar_length=bar_length, stop_loss=stop_loss, target_profit=target_profit, units=units)
+    # Binance Client
+    client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
 
-trader.start_trading()
-run_time = 30 
-start_time = time.time()
-while time.time() - start_time < run_time:
-    time.sleep(1)
+    account_info = client.get_account()
+    btc_price = float(client.get_symbol_ticker(symbol="BTCUSDT")['price'])
+    balances = account_info['balances']
+    for balance in balances:
+        if balance['asset'] == 'USDT':
+            usdt_balance = float(balance['free'])
+            print("Solde en USDT : ", usdt_balance)
 
-trader.twm.stop()
+    # Trading Variables           
+    bar_length = "1h"
+    symbol = "RNDRUSDT"
+    capital = usdt_balance
+    price = btc_price
+    pourcentage_risque_par_trade = 0.01
+    montant_risque = capital * pourcentage_risque_par_trade
+    precision = 5
+    unit = montant_risque / btc_price
+    units = round(unit, precision)
+    target_profit = 1.01
+    stop_loss = 0.99
 
-data = trader.data[trader.data["Entry"]!=0]
-# data = trader.data
-print(data)
+    # Trader Instance
+    trader = Trader(symbol=symbol, bar_length=bar_length, stop_loss=stop_loss, target_profit=target_profit, units=units)
+
+    trader.start_trading()
+    run_time = 60 
+    start_time = time.time()
+    while time.time() - start_time < run_time:
+        time.sleep(1)
+
+    trader.twm.stop()
+
+    # data = trader.data[trader.data["Entry"]!=0]
+    data = trader.data
+    print(data)
+    
             
           
