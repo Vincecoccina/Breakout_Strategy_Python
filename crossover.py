@@ -212,8 +212,6 @@ if __name__ == "__main__":
     # data = trader.data
     print(data)
 
-#---------------------
-# Implémenter Backtesting
     
             
           
