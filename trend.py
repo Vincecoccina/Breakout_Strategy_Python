@@ -23,12 +23,17 @@ class Trader():
         self.stop_loss = stop_loss
         self.take_profit = take_profit
         self.units = units
+        self.entry_price = None
+        self.in_position = False
+        self.dynamic_stop_loss = None
+
     
     def start_trading(self):
          if self.bar_length in self.available_intervals:
                  self.get_historical(symbol = self.symbol, interval = self.bar_length, start = self.start)
         
          self.calculate_indicators()
+         self.execute_trades()
 
     def get_historical(self, symbol, interval, start):
         df = pd.DataFrame(client.get_historical_klines(symbol=symbol, interval=interval, start_str=start))
@@ -108,6 +113,58 @@ class Trader():
          self.data["Trend Signal"] = self.generate_trend_signal()
          self.data["Confirmed Signal"] = self.data.apply(lambda row: row["Category"] if row["Category"] == row["Trend Signal"] else 0, axis=1)
          self.data.dropna(inplace=True)
+    
+    def update_dynamic_stop_loss(self):
+        if self.in_position and self.entry_price and not self.dynamic_stop_loss:
+            current_price = self.data["Close"].iloc[-1]
+            profit_target = self.entry_price * (1 + self.take_profit / 2)
+
+            if current_price >= profit_target:
+                self.dynamic_stop_loss = self.entry_price
+
+    def check_exit_conditions(self):
+        last_close = self.data["Close"].iloc[-1]
+
+        stop_loss_price = self.dynamic_stop_loss if self.dynamic_stop_loss else self.entry_price * (1 - self.stop_loss)
+        if last_close <= stop_loss_price:
+            return True
+        
+        if hasattr(self, 'entry_price'):
+            stop_loss_price = self.entry_price * (1 - self.stop_loss)
+            take_profit_price = self.entry_price * (1 + self.take_profit)
+            
+
+            if last_close <= stop_loss_price or last_close >= take_profit_price:
+                return True
+            
+        if hasattr(self, 'data') and "SMA_10" in self.data.columns and "SMA_30" in self.data.columns:
+            if self.data["SMA_10"].iloc[-1] < self.data["SMA_30"].iloc[-1]:
+                return True
+
+
+        return False
+    
+    def execute_trades(self):
+        self.update_dynamic_stop_loss()
+        entry = self.data["Confirmed Signal"].iloc[-1]
+
+        try:
+            if entry == 2 and not self.in_position:
+                # order = client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
+                self.entry_price = self.data["Close"].iloc[-1]
+                print(f"Achat effectué")
+                self.in_position = True
+            elif self.in_position and self.check_exit_conditions():
+                # order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                self.entry_price = None
+                print(f"Vente effectuée")
+                self.in_position = False
+                self.dynamic_stop_loss = None
+            else:
+                print(f"Aucune transaction effectué")
+            
+        except Exception as e:
+                print(f"Erreur: {e}")
 
 
 if __name__ == "__main__":
@@ -116,18 +173,43 @@ if __name__ == "__main__":
     secret_key = os.getenv("SECRET_KEY_TEST")
 
     # Binance Client
-    client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=False)
+    client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
 
-    symbol = "BTCUSDT"
-    bar_length = "1d"
-    start = "2023-09-01"
-    stop_loss = 0.95 
-    take_profit = 1.05
-    units = 10
+    symbol = "RNDRUSDT"
+    bar_length = "1h"
+    start = "2023-11-01"
+    
+    # Get account data
+    account_info = client.get_account()
+    btc_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
+    balances = account_info['balances']
+    for balance in balances:
+        if balance['asset'] == 'USDT':
+            usdt_balance = float(balance['free'])
+            print("Solde en USDT : ", usdt_balance)
+
+    # Trading Variables           
+    capital = usdt_balance
+    price = btc_price
+    pourcentage_risque_par_trade = 0.01
+    montant_risque = capital * pourcentage_risque_par_trade
+
+    # Units to trade
+    precision = 5
+    unit = montant_risque / btc_price
+    units = round(unit, precision)
+
+    # Stop Loss and Target Profit
+    ratio_risque_rendement = 3
+    pourcentage_stop_loss = 0.05
+    pourcentage_take_profit = pourcentage_stop_loss * ratio_risque_rendement
+    stop_loss = 1 - pourcentage_stop_loss 
+    take_profit = 1 + pourcentage_take_profit
+    
     trader = Trader(symbol=symbol, bar_length=bar_length, start=start, stop_loss=stop_loss, take_profit=take_profit, units=units)
 
     trader.start_trading()
-    data = trader.data
+    data = trader.data[trader.data["Confirmed Signal"]!=0]
     print(data)
 
     
