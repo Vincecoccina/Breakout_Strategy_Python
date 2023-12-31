@@ -1,6 +1,7 @@
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
+import time
 
 class Trader():
     def __init__(self, client, symbol, bar_length, start, stop_loss, take_profit, units):
@@ -158,5 +159,17 @@ class Trader():
 
 def run_trend_strategy(client, symbol, bar_length, start, stop_loss, take_profit, units):
     trader = Trader(client, symbol, bar_length, start, stop_loss, take_profit, units)
-    trader.start_trading()
-    return trader.data[trader.data["Confirmed Signal"] != 0]
+
+    try:
+        while True:
+            # Exécute la stratégie et récupère les données
+            trader.start_trading()
+
+            # Affiche ou traite les résultats si nécessaire
+            data = trader.data[trader.data["Confirmed Signal"] != 0]
+            print(data)
+
+            # Pause d'une heure avant la prochaine itération
+            time.sleep(3600)
+    except KeyboardInterrupt:
+        print("Stratégie interrompue par l'utilisateur")
