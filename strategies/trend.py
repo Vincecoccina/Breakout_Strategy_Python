@@ -1,21 +1,10 @@
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
-from tqdm import tqdm
-import plotly.graph_objects as go
-import os
-from binance.client import Client
-from binance.exceptions import BinanceAPIException, BinanceOrderException
-from binance import ThreadedWebsocketManager
-from backtesting import Backtest, Strategy
-from dotenv import load_dotenv
-import time
-
-load_dotenv()
-
 
 class Trader():
-    def __init__(self, symbol, bar_length, start, stop_loss, take_profit, units):
+    def __init__(self, client, symbol, bar_length, start, stop_loss, take_profit, units):
+        self.client = client
         self.symbol = symbol
         self.available_intervals = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
         self.bar_length = bar_length
@@ -36,7 +25,7 @@ class Trader():
          self.execute_trades()
 
     def get_historical(self, symbol, interval, start):
-        df = pd.DataFrame(client.get_historical_klines(symbol=symbol, interval=interval, start_str=start))
+        df = pd.DataFrame(self.client.get_historical_klines(symbol=symbol, interval=interval, start_str=start))
         df["Date"] = pd.to_datetime(df.iloc[:,0], unit = "ms")
         df.columns = ["Open Time", "Open", "High", "Low", "Close", "Volume",
                       "Clos Time", "Quote Asset Volume", "Number of Trades",
@@ -150,14 +139,14 @@ class Trader():
 
         try:
             if entry == 2 and not self.in_position:
-                # order = client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
+                order = self.client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
                 self.entry_price = self.data["Close"].iloc[-1]
-                print(f"Achat effectué")
+                print(f"Achat effectué : {order}")
                 self.in_position = True
             elif self.in_position and self.check_exit_conditions():
-                # order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
                 self.entry_price = None
-                print(f"Vente effectuée")
+                print(f"Vente effectuée : {order}")
                 self.in_position = False
                 self.dynamic_stop_loss = None
             else:
@@ -165,53 +154,9 @@ class Trader():
             
         except Exception as e:
                 print(f"Erreur: {e}")
-
-
-if __name__ == "__main__":
-
-    api_key = os.getenv("API_KEY_TEST")
-    secret_key = os.getenv("SECRET_KEY_TEST")
-
-    # Binance Client
-    client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
-
-    symbol = "RNDRUSDT"
-    bar_length = "1h"
-    start = "2023-11-01"
     
-    # Get account data
-    account_info = client.get_account()
-    btc_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
-    balances = account_info['balances']
-    for balance in balances:
-        if balance['asset'] == 'USDT':
-            usdt_balance = float(balance['free'])
-            print("Solde en USDT : ", usdt_balance)
 
-    # Trading Variables           
-    capital = usdt_balance
-    price = btc_price
-    pourcentage_risque_par_trade = 0.01
-    montant_risque = capital * pourcentage_risque_par_trade
-
-    # Units to trade
-    precision = 5
-    unit = montant_risque / btc_price
-    units = round(unit, precision)
-
-    # Stop Loss and Target Profit
-    ratio_risque_rendement = 3
-    pourcentage_stop_loss = 0.05
-    pourcentage_take_profit = pourcentage_stop_loss * ratio_risque_rendement
-    stop_loss = 1 - pourcentage_stop_loss 
-    take_profit = 1 + pourcentage_take_profit
-    
-    trader = Trader(symbol=symbol, bar_length=bar_length, start=start, stop_loss=stop_loss, take_profit=take_profit, units=units)
-
+def run_trend_strategy(client, symbol, bar_length, start, stop_loss, take_profit, units):
+    trader = Trader(client, symbol, bar_length, start, stop_loss, take_profit, units)
     trader.start_trading()
-    data = trader.data[trader.data["Confirmed Signal"]!=0]
-    print(data)
-
-    
-
-
+    return trader.data[trader.data["Confirmed Signal"] != 0]

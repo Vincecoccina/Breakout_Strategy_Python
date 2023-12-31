@@ -1,24 +1,18 @@
 import pandas as pd
 import pandas_ta as ta
 import numpy as np
-import plotly.graph_objects as go
-import os
-from binance.client import Client
-from binance.exceptions import BinanceAPIException, BinanceOrderException
 from binance import ThreadedWebsocketManager
-from backtesting import Backtest, Strategy
-from dotenv import load_dotenv
 import time
 
-load_dotenv()
-
 class Trader():
-      def __init__(self, symbol, bar_length, stop_loss, target_profit, units):
+      def __init__(self, client, symbol, bar_length, start, stop_loss, take_profit, units):
+            self.client = client
             self.symbol = symbol
             self.available_intervals = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
             self.bar_length = bar_length
+            self.start = start
             self.stop_loss = stop_loss
-            self.target_profit = target_profit
+            self.take_profit = take_profit
             self.units = units
             self.fast_length = 12
             self.slow_length = 26
@@ -32,7 +26,7 @@ class Trader():
             self.twm.start()
 
             if self.bar_length in self.available_intervals:
-                 self.get_recent(symbol = self.symbol, interval = self.bar_length)
+                 self.get_recent(symbol = self.symbol, interval = self.bar_length, start = self.start)
                  self.twm.start_kline_socket(callback = self.stream_candles,
                                         symbol = self.symbol, interval = self.bar_length)
             
@@ -40,10 +34,9 @@ class Trader():
             self.execute_trades()
 
       # Get Historical data
-      def get_recent(self, symbol, interval):
-        start = "2023-01-01"
-
-        df = pd.DataFrame(client.get_historical_klines(symbol=symbol, interval=interval, start_str=start))
+      def get_recent(self, symbol, interval, start):
+       
+        df = pd.DataFrame(self.client.get_historical_klines(symbol=symbol, interval=interval, start_str=start))
         df["Date"] = pd.to_datetime(df.iloc[:,0], unit = "ms")
         df.columns = ["Open Time", "Open", "High", "Low", "Close", "Volume",
                       "Clos Time", "Quote Asset Volume", "Number of Trades",
@@ -133,12 +126,12 @@ class Trader():
         try:
             if entry == 1 and last_rsi < 65 and self.in_position == False:
                 self.last_entry_price = last_close
-                order = client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
+                order = self.client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
                 print(f"Achat effectué : {order} ")
                 self.in_position = True
             elif entry == -1 and last_rsi > 35 and self.in_position == True:
                 self.last_entry_price = last_close
-                order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
                 print(f"Vente effectuée : {order}")
                 self.in_position = False
             else:
@@ -150,68 +143,27 @@ class Trader():
 
                 if last_close <= stop_loss_price or last_close >= target_profit_price:
                     # Close position
-                    order = client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                    order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
                     print(f"Position clôturée à {last_close}")
                     self.in_position = False
                     self.last_entry_price = None
         except Exception as e:
                 print(f"Erreur: {e}")
-      
-     
-if __name__ == "__main__":
 
-    api_key = os.getenv("API_KEY_TEST")
-    secret_key = os.getenv("SECRET_KEY_TEST")
-
-    # Binance Client
-    client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
-
-    # Symbol and Interval variables
-    symbol = "ETHUSDT"
-    bar_length = "30m"
-
-    # Get account data
-    account_info = client.get_account()
-    btc_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
-    balances = account_info['balances']
-    for balance in balances:
-        if balance['asset'] == 'USDT':
-            usdt_balance = float(balance['free'])
-            print("Solde en USDT : ", usdt_balance)
-
-    # Trading Variables           
-    capital = usdt_balance
-    price = btc_price
-    pourcentage_risque_par_trade = 0.01
-    montant_risque = capital * pourcentage_risque_par_trade
-
-    # Units to trade
-    precision = 5
-    unit = montant_risque / btc_price
-    units = round(unit, precision)
-
-    # Stop Loss and Target Profit
-    ratio_risque_rendement = 3
-    pourcentage_stop_loss = 0.05
-    pourcentage_target_profit = pourcentage_stop_loss * ratio_risque_rendement
-    stop_loss = 1 - pourcentage_stop_loss 
-    target_profit = 1 + pourcentage_target_profit
-
-    # Trader Instance
-    trader = Trader(symbol=symbol, bar_length=bar_length, stop_loss=stop_loss, target_profit=target_profit, units=units)
-
+def run_crossover_strategy(client, symbol, bar_length, start, stop_loss, take_profit, units):
+    trader = Trader(client, symbol, bar_length, start, stop_loss, take_profit, units)
     trader.start_trading()
-    run_time = 60 
-    start_time = time.time()
-    while time.time() - start_time < run_time:
-        time.sleep(1)
 
-    trader.twm.stop()
 
-    data = trader.data[trader.data["Entry"]!=0]
-    # data = trader.data
-    print(data)
+    try:
+        while True:       
+            # Break between iterations
+            time.sleep(60)
 
-    
-            
-          
+    except KeyboardInterrupt:
+        print("Stratégie interrompue par l'utilisateur")
+
+    finally:
+        trader.twm.stop()
+        
+    return trader.data[trader.data["Entry"] != 0]
