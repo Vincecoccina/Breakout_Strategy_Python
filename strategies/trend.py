@@ -82,7 +82,7 @@ class Trader():
 
         return categories
     
-    def generate_trend_signal(self, threshold=40):
+    def generate_trend_signal(self, threshold=20):
         trend_signal = []
         for i in range(len(self.data)):
             if self.data["ADX"].iloc[i] > threshold:

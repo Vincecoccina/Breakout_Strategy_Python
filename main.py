@@ -1,4 +1,5 @@
 from strategies.trend import run_trend_strategy
+import numpy as np
 import os
 from binance.client import Client
 import datetime
@@ -7,9 +8,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-api_key = os.getenv("API_KEY_TEST")
-secret_key = os.getenv("SECRET_KEY_TEST")
-client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
+api_key = os.getenv("API_KEY")
+secret_key = os.getenv("SECRET_KEY")
+client = Client(api_key=api_key, api_secret=secret_key, tld='com')
 
 
 def adjust_units(client, symbol, desired_units):
@@ -21,16 +22,22 @@ def adjust_units(client, symbol, desired_units):
     min_qty = float(lot_size_filter['minQty'])
     step_size = float(lot_size_filter['stepSize'])
 
-    # Ajuster les units pour respecter le step size
+    # Calculer le nombre de décimales autorisé pour la quantité
+    qty_precision = int(round(-np.log10(step_size)))
+
+    # Ajuster les units pour respecter le step size et la précision
     adjusted_units = max(min_qty, round(desired_units / step_size) * step_size)
+    adjusted_units = round(adjusted_units, qty_precision)  # Arrondir à la précision autorisée
+
     return adjusted_units
+
 
 
 def main():
     # Liste des tokens à trader
-    symbols = ["NEARUSDT", "SOLUSDT", "ETHUSDT"]
+    symbols = ["SOLUSDT", "ETHUSDT", "MATICUSDT", "BTCUSDT"]
     bar_length = "1h"
-    start = datetime.datetime.now() - datetime.timedelta(days=30)
+    start = datetime.datetime.now() - datetime.timedelta(days=60)
     start = start.strftime("%Y-%m-%d %H:%M:%S")
 
     # Get account data
