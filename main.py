@@ -28,7 +28,7 @@ def adjust_units(client, symbol, desired_units):
 
 def main():
     # Liste des tokens à trader
-    symbols = ["NEARUSDT", "GMXUSDT", "ETHUSDT"]
+    symbols = ["NEARUSDT", "SOLUSDT", "ETHUSDT"]
     bar_length = "1h"
     start = datetime.datetime.now() - datetime.timedelta(days=30)
     start = start.strftime("%Y-%m-%d %H:%M:%S")
