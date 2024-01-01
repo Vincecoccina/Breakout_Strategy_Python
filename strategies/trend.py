@@ -2,6 +2,8 @@ import pandas as pd
 import pandas_ta as ta
 import numpy as np
 import time
+import datetime
+
 
 class Trader():
     def __init__(self, client, symbol, bar_length, start, stop_loss, take_profit, units):
@@ -157,11 +159,14 @@ class Trader():
                 print(f"Erreur: {e}")
     
 
+
 def run_trend_strategy(client, symbol, bar_length, start, stop_loss, take_profit, units):
     trader = Trader(client, symbol, bar_length, start, stop_loss, take_profit, units)
 
     try:
         while True:
+            start_time = datetime.datetime.now()
+
             # Exécute la stratégie et récupère les données
             trader.start_trading()
 
@@ -169,7 +174,9 @@ def run_trend_strategy(client, symbol, bar_length, start, stop_loss, take_profit
             data = trader.data[trader.data["Confirmed Signal"] != 0]
             print(data)
 
-            # Pause d'une heure avant la prochaine itération
-            time.sleep(3600)
+            # Calcule le temps jusqu'à la prochaine heure pile
+            next_hour = (start_time + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+            wait_time = (next_hour - datetime.datetime.now()).total_seconds()
+            time.sleep(max(0, wait_time))
     except KeyboardInterrupt:
         print("Stratégie interrompue par l'utilisateur")

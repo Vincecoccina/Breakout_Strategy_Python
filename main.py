@@ -1,6 +1,8 @@
 from strategies.trend import run_trend_strategy
 import os
 from binance.client import Client
+import datetime
+import threading
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,42 +11,62 @@ api_key = os.getenv("API_KEY_TEST")
 secret_key = os.getenv("SECRET_KEY_TEST")
 client = Client(api_key=api_key, api_secret=secret_key, tld='com', testnet=True)
 
+
+def adjust_units(client, symbol, desired_units):
+    exchange_info = client.get_exchange_info()
+    symbol_info = next((item for item in exchange_info['symbols'] if item['symbol'] == symbol), None)
+
+    # Trouver les restrictions de lot pour le symbol
+    lot_size_filter = next((filter for filter in symbol_info['filters'] if filter['filterType'] == 'LOT_SIZE'), None)
+    min_qty = float(lot_size_filter['minQty'])
+    step_size = float(lot_size_filter['stepSize'])
+
+    # Ajuster les units pour respecter le step size
+    adjusted_units = max(min_qty, round(desired_units / step_size) * step_size)
+    return adjusted_units
+
+
 def main():
-    # Strategy variables
-    symbol = "RNDRUSDT"
+    # Liste des tokens à trader
+    symbols = ["NEARUSDT", "GMXUSDT", "ETHUSDT"]
     bar_length = "1h"
-    start = "2023-11-01"
-    
+    start = datetime.datetime.now() - datetime.timedelta(days=30)
+    start = start.strftime("%Y-%m-%d %H:%M:%S")
+
     # Get account data
     account_info = client.get_account()
-    btc_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
-    balances = account_info['balances']
-    for balance in balances:
-        if balance['asset'] == 'USDT':
-            usdt_balance = float(balance['free'])
-            print("Solde en USDT : ", usdt_balance)
+    usdt_balance = next((float(balance['free']) for balance in account_info['balances'] if balance['asset'] == 'USDT'), 0)
+    print("Solde en USDT : ", usdt_balance)
     
-    # Trading Variables           
+    # Trading Variables
     capital = usdt_balance
-    pourcentage_risque_par_trade = 0.01
-    montant_risque = capital * pourcentage_risque_par_trade
+    pourcentage_risque_par_trade = 0.02
 
-    # Units to trade
-    precision = 5
-    unit = montant_risque / btc_price
-    units = round(unit, precision)
+    threads = []
+    for symbol in symbols:
+        token_price = float(client.get_symbol_ticker(symbol=symbol)['price'])
+        montant_risque = capital * pourcentage_risque_par_trade
 
-    # Stop Loss and Target Profit
-    ratio_risque_rendement = 3
-    pourcentage_stop_loss = 0.05
-    pourcentage_take_profit = pourcentage_stop_loss * ratio_risque_rendement
-    stop_loss = 1 - pourcentage_stop_loss 
-    take_profit = 1 + pourcentage_take_profit
+        # Units to trade
+        desired_units = montant_risque / token_price
+        units = adjust_units(client, symbol, desired_units)
 
-    # Exécution de la stratégie
-    data = run_trend_strategy(client, symbol, bar_length, start, stop_loss, take_profit, units)
-    print(data)
+        # Stop Loss and Target Profit
+        ratio_risque_rendement = 1
+        pourcentage_stop_loss = 0.02
+        pourcentage_take_profit = pourcentage_stop_loss * ratio_risque_rendement
+        stop_loss = 1 - pourcentage_stop_loss 
+        take_profit = 1 + pourcentage_take_profit
 
-# Exécution de la fonction principale
+        # Créer un thread pour chaque stratégie de token
+        thread = threading.Thread(target=run_trend_strategy, args=(client, symbol, bar_length, start, stop_loss, take_profit, units))
+        threads.append(thread)
+        thread.start()
+
+    # Attendre que tous les threads se terminent
+    for thread in threads:
+        thread.join()
+
+
 if __name__ == "__main__":
-    main()
+     main()
