@@ -35,7 +35,7 @@ def adjust_units(client, symbol, desired_units):
 
 def main():
     # Liste des tokens à trader
-    symbols = ["SOLUSDT", "ETHUSDT", "MATICUSDT", "BTCUSDT"]
+    symbols = ["SOLUSDT", "ETHUSDT", "BTCUSDT"]
     bar_length = "1h"
     start = datetime.datetime.now() - datetime.timedelta(days=60)
     start = start.strftime("%Y-%m-%d %H:%M:%S")
@@ -47,7 +47,7 @@ def main():
     
     # Trading Variables
     capital = usdt_balance
-    pourcentage_risque_par_trade = 0.02
+    pourcentage_risque_par_trade = 0.05
 
     threads = []
     for symbol in symbols:

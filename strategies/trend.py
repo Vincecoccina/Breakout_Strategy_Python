@@ -15,6 +15,7 @@ class Trader():
         self.stop_loss = stop_loss
         self.take_profit = take_profit
         self.units = units
+        self.holding = 0
         self.entry_price = None
         self.in_position = False
         self.dynamic_stop_loss = None
@@ -144,13 +145,15 @@ class Trader():
             if entry == 2 and not self.in_position:
                 order = self.client.create_order(symbol=self.symbol, side="BUY", type="MARKET", quantity=self.units)
                 self.entry_price = self.data["Close"].iloc[-1]
+                self.holding = self.units
                 print(f"Achat effectué : {order}")
                 self.in_position = True
             elif self.in_position and self.check_exit_conditions():
-                order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.units)
+                order = self.client.create_order(symbol=self.symbol, side="SELL", type="MARKET", quantity=self.holding)
                 self.entry_price = None
                 print(f"Vente effectuée : {order}")
                 self.in_position = False
+                self.holding = 0 
                 self.dynamic_stop_loss = None
             else:
                 print(f"Aucune transaction effectué")
